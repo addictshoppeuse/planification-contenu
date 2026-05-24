@@ -480,6 +480,7 @@ html,body{height:100%;font-family:var(--day-font);background:var(--bg);color:var
           </select>
         </div>
         <button class="settings-btn" onclick="openSettings()">⚙ Personnaliser</button>
+        <button class="settings-btn" onclick="testFirebase()" title="Tester la connexion Firebase">🔬 Test</button>
         <button class="settings-btn" onclick="forceSyncNow()" title="Envoyer toutes les données vers Firebase maintenant">☁ Sync</button>
         <button class="settings-btn" id="autoSaveBtn" onclick="toggleAutoSave()" title="Activer la sauvegarde automatique sur disque">💾 Sauvegarde auto : OFF</button>
         <div style="display:flex;gap:4px">
@@ -1966,6 +1967,26 @@ async function loadFromFirestore() {
   }
 }
 
+async function testFirebase() {
+  showSyncStatus('⟳ Test en cours...', false);
+  try {
+    const resp = await fetch(fbUrl('test'), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { test: { stringValue: 'ok_' + Date.now() } } })
+    });
+    const txt = await resp.text();
+    if (resp.ok) {
+      showSyncStatus('✅ Firebase OK ! Cliquez sur ☁ Sync', false);
+    } else {
+      showSyncStatus('❌ ' + resp.status + ' — ' + txt.substring(0, 120), true);
+      console.error('Firebase error:', txt);
+    }
+  } catch(e) {
+    showSyncStatus('❌ Réseau : ' + e.message, true);
+  }
+}
+
 async function forceSyncNow() {
   showSyncStatus('⟳ Envoi des posts...', false);
   try {
@@ -2000,4 +2021,33 @@ async function forceSyncNow() {
     };
     const imgs = {
       inf: await compressAll(rawImgs.inf),
-      dov: await com
+      dov: await compressAll(rawImgs.dov)
+    };
+    // Sauvegarder les images compressées en local aussi
+    localStorage.setItem('cp_images_inf', JSON.stringify(imgs.inf));
+    localStorage.setItem('cp_images_dov', JSON.stringify(imgs.dov));
+
+    try {
+      await fbSet('images', imgs);
+      showSyncStatus('✅ Sync complète ! Ouvrez sur votre téléphone.', false);
+    } catch(imgErr) {
+      showSyncStatus('✅ Posts sync OK — images trop lourdes (supprimez les anciennes)', true);
+      console.warn('Images trop lourdes:', imgErr);
+    }
+  } catch(e) {
+    showSyncStatus('❌ Erreur : ' + e.message, true);
+    console.error('Sync error:', e);
+  }
+}
+
+// Démarrer l'app
+applyTheme();
+updateNetworkOptions();
+updateFilterNetOptions();
+switchProfile('influenceuse');
+updateTodayBadge();
+loadFromFirestore();
+// ─────────────────────────────────────────────────────────────────────────────
+</script>
+</body>
+</html>
