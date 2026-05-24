@@ -431,7 +431,7 @@ html,body{height:100%;font-family:var(--day-font);background:var(--bg);color:var
 <div class="app" style="height:calc(100vh - 98px)">
   <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
   <div class="sidebar" id="sidebar">
-    <button class="sidebar-close-btn" onclick="closeSidebar()">✕ Fermer</button>
+    <button type="button" class="sidebar-close-btn" onclick="closeSidebar()">✕ Fermer</button>
     <div class="s-block">
       <div class="s-label">Aujourd'hui</div>
       <div class="today-big" id="todayBig"></div>
@@ -619,28 +619,28 @@ html,body{height:100%;font-family:var(--day-font);background:var(--bg);color:var
   </div>
 </div>
 
-<!-- Firebase SDK -->
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyDglKKnNqGqDg-SdriLJ5dld5xdywlqkEw",
-  authDomain: "planification-contenu.firebaseapp.com",
-  projectId: "planification-contenu",
-  storageBucket: "planification-contenu.firebasestorage.app",
-  messagingSenderId: "192413369042",
-  appId: "1:192413369042:web:777687bcbde8fd0f2ba30b"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-window._db = db;
-window._fsDoc = doc;
-window._fsGetDoc = getDoc;
-window._fsSetDoc = setDoc;
-window._firebaseReady = true;
-window.dispatchEvent(new Event('firebaseReady'));
+<!-- Firebase SDK (compat version — pas besoin de modules) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script>
+(function() {
+  const firebaseConfig = {
+    apiKey: "AIzaSyDglKKnNqGqDg-SdriLJ5dld5xdywlqkEw",
+    authDomain: "planification-contenu.firebaseapp.com",
+    projectId: "planification-contenu",
+    storageBucket: "planification-contenu.firebasestorage.app",
+    messagingSenderId: "192413369042",
+    appId: "1:192413369042:web:777687bcbde8fd0f2ba30b"
+  };
+  try {
+    firebase.initializeApp(firebaseConfig);
+    window._db = firebase.firestore();
+    window._firebaseReady = true;
+    window.dispatchEvent(new Event('firebaseReady'));
+  } catch(e) {
+    console.warn('Erreur init Firebase:', e);
+  }
+})();
 </script>
 
 <script>
@@ -1859,12 +1859,12 @@ saveDayColors = function() { _origSaveDayColors(); scheduleSave(); saveToFiresto
 let _firestoreSaveTimer = null;
 
 function saveToFirestore() {
-  if (!window._firebaseReady) return;
+  if (!window._firebaseReady || !window._db) return;
   clearTimeout(_firestoreSaveTimer);
   _firestoreSaveTimer = setTimeout(async () => {
     try {
       const data = getAllDataForSave();
-      await window._fsSetDoc(window._fsDoc(window._db, 'data', 'main'), data);
+      await window._db.collection('data').doc('main').set(data);
       showSyncStatus('✓ Synchronisé');
     } catch(e) {
       console.warn('Erreur sync Firebase:', e);
@@ -1888,10 +1888,10 @@ function showSyncStatus(msg, isError) {
 }
 
 async function loadFromFirestore() {
-  if (!window._firebaseReady) return;
+  if (!window._firebaseReady || !window._db) return;
   try {
     showSyncStatus('⟳ Chargement...');
-    const snap = await window._fsGetDoc(window._fsDoc(window._db, 'data', 'main'));
+    const snap = await window._db.collection('data').doc('main').get();
     if (snap.exists()) {
       const data = snap.data();
       if (data.influenceuse) {
@@ -1937,7 +1937,4 @@ if (window._firebaseReady) {
 } else {
   window.addEventListener('firebaseReady', loadFromFirestore, { once: true });
 }
-// ─────────────────────────────────────────────────────────────────────────────
-</script>
-</body>
-</html>
+// ───────────────────────────────────────────────────
