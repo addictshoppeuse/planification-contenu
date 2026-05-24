@@ -619,45 +619,7 @@ html,body{height:100%;font-family:var(--day-font);background:var(--bg);color:var
   </div>
 </div>
 
-<!-- Firebase SDK -->
-<script>
-window._firebaseReady = false;
-window._db = null;
-
-function _initFirebase() {
-  const firebaseConfig = {
-    apiKey: "AIzaSyDglKKnNqGqDg-SdriLJ5dld5xdywlqkEw",
-    authDomain: "planification-contenu.firebaseapp.com",
-    projectId: "planification-contenu",
-    storageBucket: "planification-contenu.firebasestorage.app",
-    messagingSenderId: "192413369042",
-    appId: "1:192413369042:web:777687bcbde8fd0f2ba30b"
-  };
-  try {
-    firebase.initializeApp(firebaseConfig);
-    window._db = firebase.firestore();
-    window._firebaseReady = true;
-    window.dispatchEvent(new Event('firebaseReady'));
-  } catch(e) {
-    console.warn('Firebase init échouée:', e);
-  }
-}
-
-// Charger les scripts Firebase dynamiquement
-(function() {
-  var s1 = document.createElement('script');
-  s1.src = 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js';
-  s1.onload = function() {
-    var s2 = document.createElement('script');
-    s2.src = 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js';
-    s2.onload = _initFirebase;
-    s2.onerror = function() { console.warn('Firebase Firestore script non chargé'); };
-    document.head.appendChild(s2);
-  };
-  s1.onerror = function() { console.warn('Firebase App script non chargé'); };
-  document.head.appendChild(s1);
-})();
-</script>
+<!-- Pas de SDK externe — Firebase via REST API -->
 
 <script>
 const MONTHS=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -1311,13 +1273,32 @@ function resetStatusBtns(s){
   });
 }
 
+function compressImage(base64) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 800;
+      let w = img.width, h = img.height;
+      if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+      if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    img.onerror = () => resolve(base64); // fallback sans compression
+    img.src = base64;
+  });
+}
+
 function addImages(e){
   let files=Array.from(e.target.files);
   let readers=files.map(f=>new Promise(res=>{
     let r=new FileReader();r.onload=ev=>res(ev.target.result);r.readAsDataURL(f);
   }));
-  Promise.all(readers).then(results=>{
-    modalImages.push(...results);
+  Promise.all(readers).then(async results=>{
+    const compressed = await Promise.all(results.map(compressImage));
+    modalImages.push(...compressed);
     renderImgPreviews();
   });
   e.target.value='';
@@ -1871,22 +1852,70 @@ const _origSaveDayColors = saveDayColors;
 saveDayColors = function() { _origSaveDayColors(); scheduleSave(); saveToFirestore(); };
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── FIREBASE SYNC ─────────────────────────────────────────────────────────────
-let _firestoreSaveTimer = null;
+// ── FIREBASE SYNC via REST API (pas de SDK) ───────────────────────────────────
+// ── FIREBASE SYNC via REST API ────────────────────────────────────────────────
+const FB_PROJECT = 'planification-contenu';
+const FB_KEY = 'AIzaSyDglKKnNqGqDg-SdriLJ5dld5xdywlqkEw';
+const FB_BASE = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents/data`;
+let _fbSaveTimer = null;
+let _fbImgSaveTimer = null;
+
+function fbUrl(doc) { return `${FB_BASE}/${doc}?key=${FB_KEY}`; }
+
+async function fbSet(docName, payload) {
+  const body = { fields: { payload: { stringValue: JSON.stringify(payload) } } };
+  const resp = await fetch(fbUrl(docName), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+}
+
+async function fbGet(docName) {
+  const resp = await fetch(fbUrl(docName));
+  if (resp.status === 404) return null;
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const doc = await resp.json();
+  if (!doc.fields || !doc.fields.payload) return null;
+  return JSON.parse(doc.fields.payload.stringValue);
+}
 
 function saveToFirestore() {
-  if (!window._firebaseReady || !window._db) return;
-  clearTimeout(_firestoreSaveTimer);
-  _firestoreSaveTimer = setTimeout(async () => {
+  clearTimeout(_fbSaveTimer);
+  _fbSaveTimer = setTimeout(async () => {
     try {
-      const data = getAllDataForSave();
-      await window._db.collection('data').doc('main').set(data);
+      // Document principal : posts (sans images) + idées + thème + couleurs
+      const main = {
+        influenceuse: {
+          posts: JSON.parse(localStorage.getItem('cp_posts_inf') || '{}'),
+          ideas: JSON.parse(localStorage.getItem('cp_ideas_influenceuse') || '[]')
+        },
+        dovozo: {
+          posts: JSON.parse(localStorage.getItem('cp_posts_dov') || '{}'),
+          ideas: JSON.parse(localStorage.getItem('cp_ideas_dovozo') || '[]')
+        },
+        theme: JSON.parse(localStorage.getItem('cp_theme') || '{}'),
+        dayColors: JSON.parse(localStorage.getItem('cp_day_colors') || '{}')
+      };
+      await fbSet('main', main);
       showSyncStatus('✓ Synchronisé');
+      // Images dans un document séparé (avec délai pour ne pas surcharger)
+      clearTimeout(_fbImgSaveTimer);
+      _fbImgSaveTimer = setTimeout(async () => {
+        try {
+          const imgs = {
+            inf: JSON.parse(localStorage.getItem('cp_images_inf') || '{}'),
+            dov: JSON.parse(localStorage.getItem('cp_images_dov') || '{}')
+          };
+          await fbSet('images', imgs);
+        } catch(e) { console.warn('Images sync partielle:', e); }
+      }, 3000);
     } catch(e) {
-      console.warn('Erreur sync Firebase:', e);
+      console.warn('Erreur sync:', e);
       showSyncStatus('⚠ Erreur sync', true);
     }
-  }, 1000);
+  }, 1200);
 }
 
 function showSyncStatus(msg, isError) {
@@ -1894,65 +1923,55 @@ function showSyncStatus(msg, isError) {
   if (!el) {
     el = document.createElement('span');
     el.id = 'syncStatus';
-    el.style.cssText = 'font-size:11px;margin-left:8px;transition:opacity .5s';
-    document.getElementById('autoSaveStatus').parentNode.appendChild(el);
+    el.style.cssText = 'font-size:11px;padding:4px 10px;border-radius:10px;transition:opacity .5s;position:fixed;bottom:14px;right:14px;z-index:9999;font-family:var(--day-font);box-shadow:0 2px 8px rgba(0,0,0,.1)';
+    document.body.appendChild(el);
   }
   el.textContent = msg;
+  el.style.background = isError ? '#ffeaea' : '#eafad4';
   el.style.color = isError ? '#c0392b' : '#3b6d11';
   el.style.opacity = '1';
   if (!isError) setTimeout(() => { el.style.opacity = '0'; }, 3000);
 }
 
 async function loadFromFirestore() {
-  if (!window._firebaseReady || !window._db) return;
   try {
     showSyncStatus('⟳ Chargement...');
-    const snap = await window._db.collection('data').doc('main').get();
-    if (snap.exists()) {
-      const data = snap.data();
-      if (data.influenceuse) {
-        if (data.influenceuse.posts) localStorage.setItem('cp_posts_inf', JSON.stringify(data.influenceuse.posts));
-        if (data.influenceuse.images) localStorage.setItem('cp_images_inf', JSON.stringify(data.influenceuse.images));
-        if (data.influenceuse.ideas) localStorage.setItem('cp_ideas_influenceuse', JSON.stringify(data.influenceuse.ideas));
+    // Charger données principales
+    const main = await fbGet('main');
+    if (main) {
+      if (main.influenceuse) {
+        if (main.influenceuse.posts) localStorage.setItem('cp_posts_inf', JSON.stringify(main.influenceuse.posts));
+        if (main.influenceuse.ideas) localStorage.setItem('cp_ideas_influenceuse', JSON.stringify(main.influenceuse.ideas));
       }
-      if (data.dovozo) {
-        if (data.dovozo.posts) localStorage.setItem('cp_posts_dov', JSON.stringify(data.dovozo.posts));
-        if (data.dovozo.images) localStorage.setItem('cp_images_dov', JSON.stringify(data.dovozo.images));
-        if (data.dovozo.ideas) localStorage.setItem('cp_ideas_dovozo', JSON.stringify(data.dovozo.ideas));
+      if (main.dovozo) {
+        if (main.dovozo.posts) localStorage.setItem('cp_posts_dov', JSON.stringify(main.dovozo.posts));
+        if (main.dovozo.ideas) localStorage.setItem('cp_ideas_dovozo', JSON.stringify(main.dovozo.ideas));
       }
-      if (data.theme) localStorage.setItem('cp_theme', JSON.stringify(data.theme));
-      if (data.dayColors) localStorage.setItem('cp_day_colors', JSON.stringify(data.dayColors));
-      showSyncStatus('✓ Données chargées');
-    } else {
-      showSyncStatus('✓ Nouveau fichier');
+      if (main.theme) localStorage.setItem('cp_theme', JSON.stringify(main.theme));
+      if (main.dayColors) localStorage.setItem('cp_day_colors', JSON.stringify(main.dayColors));
     }
-    // Recharger l'app avec les données Firestore
-    posts = loadPosts();
-    theme = loadTheme();
-    dayColors = loadDayColors();
-    applyTheme();
-    applyDayColors();
-    renderSidebar();
-    renderMain();
-    updateTodayBadge();
+    // Charger images séparément
+    const imgs = await fbGet('images');
+    if (imgs) {
+      if (imgs.inf) localStorage.setItem('cp_images_inf', JSON.stringify(imgs.inf));
+      if (imgs.dov) localStorage.setItem('cp_images_dov', JSON.stringify(imgs.dov));
+    }
+    showSyncStatus(main ? '✓ Données chargées' : '✓ Prêt');
+    posts = loadPosts(); theme = loadTheme(); dayColors = loadDayColors();
+    applyTheme(); applyDayColors(); renderSidebar(); renderMain(); updateTodayBadge();
   } catch(e) {
-    console.warn('Erreur chargement Firebase:', e);
-    showSyncStatus('⚠ Hors ligne - données locales', true);
+    console.warn('Erreur chargement:', e);
+    showSyncStatus('⚠ Hors ligne — données locales', true);
   }
 }
 
-// Démarrer l'app puis charger depuis Firestore
+// Démarrer l'app
 applyTheme();
 updateNetworkOptions();
 updateFilterNetOptions();
 switchProfile('influenceuse');
 updateTodayBadge();
-
-if (window._firebaseReady) {
-  loadFromFirestore();
-} else {
-  window.addEventListener('firebaseReady', loadFromFirestore, { once: true });
-}
+loadFromFirestore();
 // ─────────────────────────────────────────────────────────────────────────────
 </script>
 </body>
