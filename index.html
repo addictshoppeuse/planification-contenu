@@ -1854,44 +1854,14 @@ const _origSaveDayColors = saveDayColors;
 saveDayColors = function() { _origSaveDayColors(); scheduleSave(); saveToFirestore(); };
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── FIREBASE SYNC via REST API (pas de SDK) ───────────────────────────────────
-// ── SYNC via JSONBin.io ───────────────────────────────────────────────────────
-const JB_BIN = '6a12da23ee5a733b120fcb10';
-const JB_KEY = '$2a$10$kTkyzdSetR/z7Wkt4/Pwmu2cRZhYArgemeCwT7d.xXjNBLHBJnZHy';
-const JB_URL = `https://api.jsonbin.io/v3/b/${JB_BIN}`;
-let _fbSaveTimer = null;
-
-function saveToFirestore() {
-  clearTimeout(_fbSaveTimer);
-  _fbSaveTimer = setTimeout(async () => {
-    try {
-      const data = {
-        influenceuse: {
-          posts: JSON.parse(localStorage.getItem('cp_posts_inf') || '{}'),
-          ideas: JSON.parse(localStorage.getItem('cp_ideas_influenceuse') || '[]'),
-          images: JSON.parse(localStorage.getItem('cp_images_inf') || '{}')
-        },
-        dovozo: {
-          posts: JSON.parse(localStorage.getItem('cp_posts_dov') || '{}'),
-          ideas: JSON.parse(localStorage.getItem('cp_ideas_dovozo') || '[]'),
-          images: JSON.parse(localStorage.getItem('cp_images_dov') || '{}')
-        },
-        theme: JSON.parse(localStorage.getItem('cp_theme') || '{}'),
-        dayColors: JSON.parse(localStorage.getItem('cp_day_colors') || '{}')
-      };
-      const resp = await fetch(JB_URL, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'X-Master-Key': JB_KEY },
-        body: JSON.stringify(data)
-      });
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      showSyncStatus('✓ Synchronisé');
-    } catch(e) {
-      console.warn('Erreur sync:', e);
-      showSyncStatus('⚠ Erreur sync', true);
-    }
-  }, 1200);
-}
+// ── SYNC via GitHub API ───────────────────────────────────────────────────────
+const GH_TOKEN = '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';
+const GH_REPO  = 'addictshoppeuse/planification-contenu';
+const GH_FILE  = 'data.json';
+const GH_API   = `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
+const GH_RAW   = `https://raw.githubusercontent.com/${GH_REPO}/main/${GH_FILE}?t=`;
+let _ghSaveTimer = null;
+let _ghSaving = false;
 
 function showSyncStatus(msg, isError) {
   let el = document.getElementById('syncStatus');
@@ -1905,30 +1875,93 @@ function showSyncStatus(msg, isError) {
   el.style.background = isError ? '#ffeaea' : '#eafad4';
   el.style.color = isError ? '#c0392b' : '#3b6d11';
   el.style.opacity = '1';
-  if (!isError) setTimeout(() => { el.style.opacity = '0'; }, 3000);
+  if (!isError) setTimeout(() => { el.style.opacity = '0'; }, 3500);
+}
+
+function collectData() {
+  return {
+    influenceuse: {
+      posts:  JSON.parse(localStorage.getItem('cp_posts_inf')           || '{}'),
+      ideas:  JSON.parse(localStorage.getItem('cp_ideas_influenceuse')  || '[]'),
+      images: JSON.parse(localStorage.getItem('cp_images_inf')          || '{}')
+    },
+    dovozo: {
+      posts:  JSON.parse(localStorage.getItem('cp_posts_dov')           || '{}'),
+      ideas:  JSON.parse(localStorage.getItem('cp_ideas_dovozo')        || '[]'),
+      images: JSON.parse(localStorage.getItem('cp_images_dov')          || '{}')
+    },
+    theme:     JSON.parse(localStorage.getItem('cp_theme')      || '{}'),
+    dayColors: JSON.parse(localStorage.getItem('cp_day_colors') || '{}'),
+    savedAt:   new Date().toISOString()
+  };
+}
+
+async function ghGetSHA() {
+  try {
+    const r = await fetch(GH_API, {
+      headers: { 'Authorization': 'token ' + GH_TOKEN, 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    return j.sha || null;
+  } catch(e) { return null; }
+}
+
+async function ghWriteFile(data, sha) {
+  const content = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+  const body = { message: 'sync ' + new Date().toISOString(), content };
+  if (sha) body.sha = sha;
+  const r = await fetch(GH_API, {
+    method: 'PUT',
+    headers: {
+      'Authorization': 'token ' + GH_TOKEN,
+      'Content-Type': 'application/json',
+      'Accept': 'application/vnd.github.v3+json'
+    },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error((err.message || 'HTTP ' + r.status));
+  }
+  return true;
+}
+
+function saveToFirestore() {
+  clearTimeout(_ghSaveTimer);
+  _ghSaveTimer = setTimeout(async () => {
+    if (_ghSaving) return;
+    _ghSaving = true;
+    try {
+      const sha  = await ghGetSHA();
+      await ghWriteFile(collectData(), sha);
+      showSyncStatus('✓ Synchronisé');
+    } catch(e) {
+      console.warn('Erreur sync GitHub:', e);
+      showSyncStatus('⚠ Erreur sync', true);
+    } finally { _ghSaving = false; }
+  }, 1500);
 }
 
 async function loadFromFirestore() {
   try {
     showSyncStatus('⟳ Chargement...');
-    const resp = await fetch(JB_URL + '/latest', {
-      headers: { 'X-Master-Key': JB_KEY }
-    });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const json = await resp.json();
-    const data = json.record;
-    if (data && Object.keys(data).length > 1) {
+    const r = await fetch(GH_RAW + Date.now());
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    if (data && (data.influenceuse || data.dovozo)) {
       if (data.influenceuse) {
-        if (data.influenceuse.posts) localStorage.setItem('cp_posts_inf', JSON.stringify(data.influenceuse.posts));
-        if (data.influenceuse.ideas) localStorage.setItem('cp_ideas_influenceuse', JSON.stringify(data.influenceuse.ideas));
-        if (data.influenceuse.images) localStorage.setItem('cp_images_inf', JSON.stringify(data.influenceuse.images));
+        if (data.influenceuse.posts)  localStorage.setItem('cp_posts_inf',          JSON.stringify(data.influenceuse.posts));
+        if (data.influenceuse.ideas)  localStorage.setItem('cp_ideas_influenceuse', JSON.stringify(data.influenceuse.ideas));
+        if (data.influenceuse.images) localStorage.setItem('cp_images_inf',         JSON.stringify(data.influenceuse.images));
       }
       if (data.dovozo) {
-        if (data.dovozo.posts) localStorage.setItem('cp_posts_dov', JSON.stringify(data.dovozo.posts));
-        if (data.dovozo.ideas) localStorage.setItem('cp_ideas_dovozo', JSON.stringify(data.dovozo.ideas));
-        if (data.dovozo.images) localStorage.setItem('cp_images_dov', JSON.stringify(data.dovozo.images));
+        if (data.dovozo.posts)  localStorage.setItem('cp_posts_dov',    JSON.stringify(data.dovozo.posts));
+        if (data.dovozo.ideas)  localStorage.setItem('cp_ideas_dovozo', JSON.stringify(data.dovozo.ideas));
+        if (data.dovozo.images) localStorage.setItem('cp_images_dov',   JSON.stringify(data.dovozo.images));
       }
-      if (data.theme) localStorage.setItem('cp_theme', JSON.stringify(data.theme));
+      if (data.theme)     localStorage.setItem('cp_theme',      JSON.stringify(data.theme));
       if (data.dayColors) localStorage.setItem('cp_day_colors', JSON.stringify(data.dayColors));
       showSyncStatus('✓ Données chargées');
     } else {
@@ -1937,19 +1970,21 @@ async function loadFromFirestore() {
     posts = loadPosts(); theme = loadTheme(); dayColors = loadDayColors();
     applyTheme(); applyDayColors(); renderSidebar(); renderMain(); updateTodayBadge();
   } catch(e) {
-    console.warn('Erreur chargement:', e);
+    console.warn('Erreur chargement GitHub:', e);
     showSyncStatus('⚠ Hors ligne — données locales', true);
   }
 }
 
 async function testFirebase() {
-  showSyncStatus('⟳ Test connexion...', false);
+  showSyncStatus('⟳ Test connexion GitHub...', false);
   try {
-    const resp = await fetch(JB_URL + '/latest', { headers: { 'X-Master-Key': JB_KEY } });
-    if (resp.ok) {
-      showSyncStatus('✅ Connexion OK ! Cliquez sur ☁ Sync', false);
+    const r = await fetch(GH_API, {
+      headers: { 'Authorization': 'token ' + GH_TOKEN, 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if (r.ok || r.status === 404) {
+      showSyncStatus('✅ Connexion GitHub OK !', false);
     } else {
-      showSyncStatus('❌ Erreur ' + resp.status, true);
+      showSyncStatus('❌ Erreur GitHub ' + r.status, true);
     }
   } catch(e) {
     showSyncStatus('❌ Réseau : ' + e.message, true);
@@ -1970,26 +2005,11 @@ async function forceSyncNow() {
     const dovImgs = await compressAll(JSON.parse(localStorage.getItem('cp_images_dov') || '{}'));
     localStorage.setItem('cp_images_inf', JSON.stringify(infImgs));
     localStorage.setItem('cp_images_dov', JSON.stringify(dovImgs));
-    const data = {
-      influenceuse: {
-        posts: JSON.parse(localStorage.getItem('cp_posts_inf') || '{}'),
-        ideas: JSON.parse(localStorage.getItem('cp_ideas_influenceuse') || '[]'),
-        images: infImgs
-      },
-      dovozo: {
-        posts: JSON.parse(localStorage.getItem('cp_posts_dov') || '{}'),
-        ideas: JSON.parse(localStorage.getItem('cp_ideas_dovozo') || '[]'),
-        images: dovImgs
-      },
-      theme: JSON.parse(localStorage.getItem('cp_theme') || '{}'),
-      dayColors: JSON.parse(localStorage.getItem('cp_day_colors') || '{}')
-    };
-    const resp = await fetch(JB_URL, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-Master-Key': JB_KEY },
-      body: JSON.stringify(data)
-    });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = collectData();
+    data.influenceuse.images = infImgs;
+    data.dovozo.images = dovImgs;
+    const sha = await ghGetSHA();
+    await ghWriteFile(data, sha);
     showSyncStatus('✅ Sync complète ! Ouvrez sur votre téléphone.', false);
   } catch(e) {
     showSyncStatus('❌ Erreur : ' + e.message, true);
