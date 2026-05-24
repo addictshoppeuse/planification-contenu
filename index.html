@@ -1855,7 +1855,7 @@ saveDayColors = function() { _origSaveDayColors(); scheduleSave(); saveToFiresto
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── SYNC via GitHub API ───────────────────────────────────────────────────────
-const GH_TOKEN = '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';
+function getGHToken() { return localStorage.getItem('gh_sync_token') || ''; }
 const GH_REPO  = 'addictshoppeuse/planification-contenu';
 const GH_FILE  = 'data.json';
 const GH_API   = `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
