@@ -1855,7 +1855,7 @@ saveDayColors = function() { _origSaveDayColors(); scheduleSave(); saveToFiresto
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── SYNC via GitHub API ───────────────────────────────────────────────────────
-const GH_TOKEN = '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';
+function getGHToken() { return localStorage.getItem('gh_sync_token') || ''; }
 const GH_REPO  = 'addictshoppeuse/planification-contenu';
 const GH_FILE  = 'data.json';
 const GH_API   = `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
@@ -1899,7 +1899,7 @@ function collectData() {
 async function ghGetSHA() {
   try {
     const r = await fetch(GH_API, {
-      headers: { 'Authorization': 'token ' + GH_TOKEN, 'Accept': 'application/vnd.github.v3+json' }
+      headers: { 'Authorization': 'token ' + getGHToken(), 'Accept': 'application/vnd.github.v3+json' }
     });
     if (r.status === 404) return null;
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -1915,7 +1915,7 @@ async function ghWriteFile(data, sha) {
   const r = await fetch(GH_API, {
     method: 'PUT',
     headers: {
-      'Authorization': 'token ' + GH_TOKEN,
+      'Authorization': 'token ' + getGHToken(),
       'Content-Type': 'application/json',
       'Accept': 'application/vnd.github.v3+json'
     },
@@ -1929,6 +1929,7 @@ async function ghWriteFile(data, sha) {
 }
 
 function saveToFirestore() {
+  if (!getGHToken()) return;
   clearTimeout(_ghSaveTimer);
   _ghSaveTimer = setTimeout(async () => {
     if (_ghSaving) return;
@@ -1975,14 +1976,53 @@ async function loadFromFirestore() {
   }
 }
 
+function showTokenModal() {
+  let overlay = document.getElementById('tokenOverlay');
+  if (overlay) { overlay.style.display='flex'; return; }
+  overlay = document.createElement('div');
+  overlay.id = 'tokenOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:28px 24px;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.18);font-family:var(--day-font)">
+      <h3 style="font-size:16px;margin-bottom:8px;color:#3a2a1e">🔑 Token GitHub</h3>
+      <p style="font-size:12px;color:#9e7e6e;margin-bottom:14px">Collez votre Personal Access Token (commence par <b>ghp_</b>). Il sera sauvegardé uniquement dans ce navigateur.</p>
+      <input id="tokenInput" type="password" placeholder="ghp_xxxxxxxxxxxx"
+        style="width:100%;padding:9px 12px;border:1.5px solid #e8d5cc;border-radius:8px;font-size:13px;outline:none;margin-bottom:14px"
+        value="${getGHToken()}">
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="document.getElementById('tokenOverlay').style.display='none'"
+          style="padding:7px 16px;border:1px solid #e8d5cc;border-radius:8px;background:#fff;cursor:pointer;font-size:13px">Annuler</button>
+        <button onclick="saveTokenFromModal()"
+          style="padding:7px 16px;border:none;border-radius:8px;background:#d4537e;color:#fff;cursor:pointer;font-size:13px;font-weight:600">Enregistrer</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function saveTokenFromModal() {
+  const val = document.getElementById('tokenInput').value.trim();
+  if (!val.startsWith('ghp_')) {
+    alert('Le token doit commencer par ghp_'); return;
+  }
+  localStorage.setItem('gh_sync_token', val);
+  document.getElementById('tokenOverlay').style.display = 'none';
+  showSyncStatus('✅ Token enregistré ! Test en cours...', false);
+  setTimeout(testFirebase, 500);
+}
+
 async function testFirebase() {
+  const tok = getGHToken();
+  if (!tok) { showTokenModal(); return; }
   showSyncStatus('⟳ Test connexion GitHub...', false);
   try {
     const r = await fetch(GH_API, {
-      headers: { 'Authorization': 'token ' + GH_TOKEN, 'Accept': 'application/vnd.github.v3+json' }
+      headers: { 'Authorization': 'token ' + tok, 'Accept': 'application/vnd.github.v3+json' }
     });
     if (r.ok || r.status === 404) {
       showSyncStatus('✅ Connexion GitHub OK !', false);
+    } else if (r.status === 401) {
+      showSyncStatus('❌ Token invalide — cliquez 🔬 pour le changer', true);
+      localStorage.removeItem('gh_sync_token');
     } else {
       showSyncStatus('❌ Erreur GitHub ' + r.status, true);
     }
@@ -1992,6 +2032,7 @@ async function testFirebase() {
 }
 
 async function forceSyncNow() {
+  if (!getGHToken()) { showTokenModal(); return; }
   showSyncStatus('⟳ Compression et envoi...', false);
   try {
     const compressAll = async (imgObj) => {
