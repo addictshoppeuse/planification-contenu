@@ -1967,8 +1967,9 @@ async function loadFromFirestore() {
 }
 
 async function forceSyncNow() {
-  showSyncStatus('⟳ Envoi en cours...', false);
+  showSyncStatus('⟳ Envoi des posts...', false);
   try {
+    // Étape 1 : données principales sans images
     const main = {
       influenceuse: {
         posts: JSON.parse(localStorage.getItem('cp_posts_inf') || '{}'),
@@ -1982,27 +1983,21 @@ async function forceSyncNow() {
       dayColors: JSON.parse(localStorage.getItem('cp_day_colors') || '{}')
     };
     await fbSet('main', main);
-    const imgs = {
+    showSyncStatus('⟳ Envoi des images...', false);
+
+    // Étape 2 : images — on compresse les existantes avant envoi
+    const rawImgs = {
       inf: JSON.parse(localStorage.getItem('cp_images_inf') || '{}'),
       dov: JSON.parse(localStorage.getItem('cp_images_dov') || '{}')
     };
-    await fbSet('images', imgs);
-    showSyncStatus('✅ Sync réussie ! Ouvrez maintenant sur votre téléphone.', false);
-    setTimeout(() => showSyncStatus('', false), 6000);
-  } catch(e) {
-    showSyncStatus('❌ Erreur : ' + e.message, true);
-    console.error('Sync error:', e);
-  }
-}
-
-// Démarrer l'app
-applyTheme();
-updateNetworkOptions();
-updateFilterNetOptions();
-switchProfile('influenceuse');
-updateTodayBadge();
-loadFromFirestore();
-// ─────────────────────────────────────────────────────────────────────────────
-</script>
-</body>
-</html>
+    // Compresser toutes les images existantes
+    const compressAll = async (imgObj) => {
+      const result = {};
+      for (const key of Object.keys(imgObj)) {
+        result[key] = await Promise.all((imgObj[key] || []).map(src => compressImage(src)));
+      }
+      return result;
+    };
+    const imgs = {
+      inf: await compressAll(rawImgs.inf),
+      dov: await com
