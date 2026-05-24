@@ -1855,64 +1855,37 @@ saveDayColors = function() { _origSaveDayColors(); scheduleSave(); saveToFiresto
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── FIREBASE SYNC via REST API (pas de SDK) ───────────────────────────────────
-// ── FIREBASE SYNC via REST API ────────────────────────────────────────────────
-const FB_PROJECT = 'planification-contenu';
-const FB_KEY = 'AIzaSyDglKKnNqGqDg-SdriLJ5dld5xdywlqkEw';
-const FB_BASE = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents/data`;
+// ── SYNC via JSONBin.io ───────────────────────────────────────────────────────
+const JB_BIN = '6a12da23ee5a733b120fcb10';
+const JB_KEY = '$2a$10$DNNBP2hfWx6edGuDbb1VD.Nc42DapBec0NXZ4s5/ZirWQ2t.tCeCK';
+const JB_URL = `https://api.jsonbin.io/v3/b/${JB_BIN}`;
 let _fbSaveTimer = null;
-let _fbImgSaveTimer = null;
-
-function fbUrl(doc) { return `${FB_BASE}/${doc}?key=${FB_KEY}`; }
-
-async function fbSet(docName, payload) {
-  const body = { fields: { payload: { stringValue: JSON.stringify(payload) } } };
-  const resp = await fetch(fbUrl(docName), {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (!resp.ok) throw new Error('HTTP ' + resp.status);
-}
-
-async function fbGet(docName) {
-  const resp = await fetch(fbUrl(docName));
-  if (resp.status === 404) return null;
-  if (!resp.ok) throw new Error('HTTP ' + resp.status);
-  const doc = await resp.json();
-  if (!doc.fields || !doc.fields.payload) return null;
-  return JSON.parse(doc.fields.payload.stringValue);
-}
 
 function saveToFirestore() {
   clearTimeout(_fbSaveTimer);
   _fbSaveTimer = setTimeout(async () => {
     try {
-      // Document principal : posts (sans images) + idées + thème + couleurs
-      const main = {
+      const data = {
         influenceuse: {
           posts: JSON.parse(localStorage.getItem('cp_posts_inf') || '{}'),
-          ideas: JSON.parse(localStorage.getItem('cp_ideas_influenceuse') || '[]')
+          ideas: JSON.parse(localStorage.getItem('cp_ideas_influenceuse') || '[]'),
+          images: JSON.parse(localStorage.getItem('cp_images_inf') || '{}')
         },
         dovozo: {
           posts: JSON.parse(localStorage.getItem('cp_posts_dov') || '{}'),
-          ideas: JSON.parse(localStorage.getItem('cp_ideas_dovozo') || '[]')
+          ideas: JSON.parse(localStorage.getItem('cp_ideas_dovozo') || '[]'),
+          images: JSON.parse(localStorage.getItem('cp_images_dov') || '{}')
         },
         theme: JSON.parse(localStorage.getItem('cp_theme') || '{}'),
         dayColors: JSON.parse(localStorage.getItem('cp_day_colors') || '{}')
       };
-      await fbSet('main', main);
+      const resp = await fetch(JB_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Master-Key': JB_KEY },
+        body: JSON.stringify(data)
+      });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
       showSyncStatus('✓ Synchronisé');
-      // Images dans un document séparé (avec délai pour ne pas surcharger)
-      clearTimeout(_fbImgSaveTimer);
-      _fbImgSaveTimer = setTimeout(async () => {
-        try {
-          const imgs = {
-            inf: JSON.parse(localStorage.getItem('cp_images_inf') || '{}'),
-            dov: JSON.parse(localStorage.getItem('cp_images_dov') || '{}')
-          };
-          await fbSet('images', imgs);
-        } catch(e) { console.warn('Images sync partielle:', e); }
-      }, 3000);
     } catch(e) {
       console.warn('Erreur sync:', e);
       showSyncStatus('⚠ Erreur sync', true);
@@ -1938,27 +1911,29 @@ function showSyncStatus(msg, isError) {
 async function loadFromFirestore() {
   try {
     showSyncStatus('⟳ Chargement...');
-    // Charger données principales
-    const main = await fbGet('main');
-    if (main) {
-      if (main.influenceuse) {
-        if (main.influenceuse.posts) localStorage.setItem('cp_posts_inf', JSON.stringify(main.influenceuse.posts));
-        if (main.influenceuse.ideas) localStorage.setItem('cp_ideas_influenceuse', JSON.stringify(main.influenceuse.ideas));
+    const resp = await fetch(JB_URL + '/latest', {
+      headers: { 'X-Master-Key': JB_KEY }
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const json = await resp.json();
+    const data = json.record;
+    if (data && Object.keys(data).length > 1) {
+      if (data.influenceuse) {
+        if (data.influenceuse.posts) localStorage.setItem('cp_posts_inf', JSON.stringify(data.influenceuse.posts));
+        if (data.influenceuse.ideas) localStorage.setItem('cp_ideas_influenceuse', JSON.stringify(data.influenceuse.ideas));
+        if (data.influenceuse.images) localStorage.setItem('cp_images_inf', JSON.stringify(data.influenceuse.images));
       }
-      if (main.dovozo) {
-        if (main.dovozo.posts) localStorage.setItem('cp_posts_dov', JSON.stringify(main.dovozo.posts));
-        if (main.dovozo.ideas) localStorage.setItem('cp_ideas_dovozo', JSON.stringify(main.dovozo.ideas));
+      if (data.dovozo) {
+        if (data.dovozo.posts) localStorage.setItem('cp_posts_dov', JSON.stringify(data.dovozo.posts));
+        if (data.dovozo.ideas) localStorage.setItem('cp_ideas_dovozo', JSON.stringify(data.dovozo.ideas));
+        if (data.dovozo.images) localStorage.setItem('cp_images_dov', JSON.stringify(data.dovozo.images));
       }
-      if (main.theme) localStorage.setItem('cp_theme', JSON.stringify(main.theme));
-      if (main.dayColors) localStorage.setItem('cp_day_colors', JSON.stringify(main.dayColors));
+      if (data.theme) localStorage.setItem('cp_theme', JSON.stringify(data.theme));
+      if (data.dayColors) localStorage.setItem('cp_day_colors', JSON.stringify(data.dayColors));
+      showSyncStatus('✓ Données chargées');
+    } else {
+      showSyncStatus('✓ Prêt');
     }
-    // Charger images séparément
-    const imgs = await fbGet('images');
-    if (imgs) {
-      if (imgs.inf) localStorage.setItem('cp_images_inf', JSON.stringify(imgs.inf));
-      if (imgs.dov) localStorage.setItem('cp_images_dov', JSON.stringify(imgs.dov));
-    }
-    showSyncStatus(main ? '✓ Données chargées' : '✓ Prêt');
     posts = loadPosts(); theme = loadTheme(); dayColors = loadDayColors();
     applyTheme(); applyDayColors(); renderSidebar(); renderMain(); updateTodayBadge();
   } catch(e) {
@@ -1968,19 +1943,13 @@ async function loadFromFirestore() {
 }
 
 async function testFirebase() {
-  showSyncStatus('⟳ Test en cours...', false);
+  showSyncStatus('⟳ Test connexion...', false);
   try {
-    const resp = await fetch(fbUrl('test'), {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: { test: { stringValue: 'ok_' + Date.now() } } })
-    });
-    const txt = await resp.text();
+    const resp = await fetch(JB_URL + '/latest', { headers: { 'X-Master-Key': JB_KEY } });
     if (resp.ok) {
-      showSyncStatus('✅ Firebase OK ! Cliquez sur ☁ Sync', false);
+      showSyncStatus('✅ Connexion OK ! Cliquez sur ☁ Sync', false);
     } else {
-      showSyncStatus('❌ ' + resp.status + ' — ' + txt.substring(0, 120), true);
-      console.error('Firebase error:', txt);
+      showSyncStatus('❌ Erreur ' + resp.status, true);
     }
   } catch(e) {
     showSyncStatus('❌ Réseau : ' + e.message, true);
