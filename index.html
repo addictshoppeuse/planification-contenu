@@ -619,11 +619,12 @@ html,body{height:100%;font-family:var(--day-font);background:var(--bg);color:var
   </div>
 </div>
 
-<!-- Firebase SDK (compat version — pas besoin de modules) -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<!-- Firebase SDK -->
 <script>
-(function() {
+window._firebaseReady = false;
+window._db = null;
+
+function _initFirebase() {
   const firebaseConfig = {
     apiKey: "AIzaSyDglKKnNqGqDg-SdriLJ5dld5xdywlqkEw",
     authDomain: "planification-contenu.firebaseapp.com",
@@ -638,8 +639,23 @@ html,body{height:100%;font-family:var(--day-font);background:var(--bg);color:var
     window._firebaseReady = true;
     window.dispatchEvent(new Event('firebaseReady'));
   } catch(e) {
-    console.warn('Erreur init Firebase:', e);
+    console.warn('Firebase init échouée:', e);
   }
+}
+
+// Charger les scripts Firebase dynamiquement
+(function() {
+  var s1 = document.createElement('script');
+  s1.src = 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js';
+  s1.onload = function() {
+    var s2 = document.createElement('script');
+    s2.src = 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js';
+    s2.onload = _initFirebase;
+    s2.onerror = function() { console.warn('Firebase Firestore script non chargé'); };
+    document.head.appendChild(s2);
+  };
+  s1.onerror = function() { console.warn('Firebase App script non chargé'); };
+  document.head.appendChild(s1);
 })();
 </script>
 
@@ -1937,4 +1953,7 @@ if (window._firebaseReady) {
 } else {
   window.addEventListener('firebaseReady', loadFromFirestore, { once: true });
 }
-// ───────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+</script>
+</body>
+</html>
