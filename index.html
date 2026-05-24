@@ -209,6 +209,129 @@ html,body{height:100%;font-family:var(--day-font);background:var(--bg);color:var
 .sp-reset:hover{border-color:var(--accent);color:var(--accent)}
 .sp-close{float:right;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)}
 
+/* ── MOBILE ──────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+
+  /* Titre */
+  .page-main-title { font-size: 20px; }
+  .page-title-bar { height: 48px; padding: 0 12px; }
+
+  /* Profile tabs */
+  .profile-tabs-bar { padding: 0 8px 6px; gap: 6px; }
+  .profile-tab { font-size: 11px; padding: 4px 12px; }
+
+  /* Layout principal : sidebar cachée par défaut */
+  .app { flex-direction: column; height: auto; overflow: visible; }
+  .sidebar {
+    display: none;
+    width: 100%;
+    min-width: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 500;
+    overflow-y: auto;
+    background: var(--sidebar-bg);
+  }
+  .sidebar.open { display: flex; flex-direction: column; }
+  .sidebar-close-btn {
+    display: flex !important;
+  }
+  .main { width: 100%; }
+
+  /* Top bar */
+  .top-bar {
+    padding: 8px 12px;
+    gap: 6px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--bg);
+  }
+  .top-bar > div:last-child {
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .view-tabs { gap: 2px; }
+  .vtab { padding: 4px 10px; font-size: 11px; }
+  .filter-bar { display: none; } /* caché sur mobile, trop encombrant */
+  .settings-btn { padding: 5px 10px; font-size: 11px; }
+
+  /* Masquer les boutons secondaires sur mobile */
+  #autoSaveBtn { display: none; }
+  #autoSaveStatus { display: none !important; }
+
+  /* Colonnes de jours */
+  .scroll-area { padding: 8px 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .days-strip { gap: 8px; }
+  .day-col { width: 85vw; min-width: 85vw; }
+
+  /* Modales plein écran */
+  .modal {
+    width: 100%;
+    max-width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    margin: 0;
+    overflow-y: auto;
+  }
+  .overlay { align-items: flex-start; }
+  .settings-panel { width: 100%; height: 100dvh; }
+
+  /* Idées : colonne unique */
+  .ideas-layout { flex-direction: column; }
+
+  /* Recap */
+  .recap-cards { gap: 8px; }
+  .recap-card { min-width: 90px; padding: 10px 12px; }
+  .recap-card-num { font-size: 24px; }
+
+  /* Badge aujourd'hui */
+  .main-title { font-size: 13px; }
+}
+
+/* Bouton hamburger & fermer sidebar */
+.hamburger-btn {
+  display: none;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--day-color);
+}
+.sidebar-close-btn {
+  display: none;
+  position: sticky;
+  top: 0;
+  background: var(--sidebar-bg);
+  border: none;
+  font-size: 20px;
+  padding: 12px 16px;
+  cursor: pointer;
+  color: var(--text-muted);
+  text-align: right;
+  width: 100%;
+  z-index: 10;
+  border-bottom: 1px solid var(--border);
+}
+@media (max-width: 768px) {
+  .hamburger-btn { display: inline-flex; align-items: center; gap: 4px; }
+}
+
+/* Overlay sidebar mobile */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.4);
+  z-index: 499;
+}
+.sidebar-overlay.open { display: block; }
+
 /* PROFILE TABS */
 .profile-tabs-bar{display:flex;align-items:center;justify-content:center;gap:4px;background:var(--title-bg);padding:0 28px 8px;flex-shrink:0}
 .profile-tab{padding:5px 18px;font-size:12px;font-weight:600;font-family:var(--day-font);border:none;cursor:pointer;border-radius:20px;transition:all .18s;color:rgba(255,255,255,.55);background:transparent;letter-spacing:.01em}
@@ -306,7 +429,9 @@ html,body{height:100%;font-family:var(--day-font);background:var(--bg);color:var
 </div>
 <div id="dragWeekIndicator" class="drag-week-indicator"></div>
 <div class="app" style="height:calc(100vh - 98px)">
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
   <div class="sidebar" id="sidebar">
+    <button class="sidebar-close-btn" onclick="closeSidebar()">✕ Fermer</button>
     <div class="s-block">
       <div class="s-label">Aujourd'hui</div>
       <div class="today-big" id="todayBig"></div>
@@ -332,7 +457,10 @@ html,body{height:100%;font-family:var(--day-font);background:var(--bg);color:var
 
   <div class="main">
     <div class="top-bar">
-      <div class="main-title" id="mainTitle"></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="hamburger-btn" onclick="openSidebar()">☰ <span style="font-size:11px">Menu</span></button>
+        <div class="main-title" id="mainTitle"></div>
+      </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <div class="view-tabs">
           <button class="vtab active" onclick="setView('week',this)">Semaine</button>
@@ -608,6 +736,17 @@ function applyFilters() {
   activeFilters.net = document.getElementById('filterNet').value;
   activeFilters.status = document.getElementById('filterStatus').value;
   renderMain();
+}
+
+function openSidebar() {
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sidebarOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.remove('open');
+  document.body.style.overflow = '';
 }
 
 function updateTodayBadge() {
