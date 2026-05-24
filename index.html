@@ -1957,30 +1957,8 @@ async function testFirebase() {
 }
 
 async function forceSyncNow() {
-  showSyncStatus('⟳ Envoi des posts...', false);
+  showSyncStatus('⟳ Compression et envoi...', false);
   try {
-    // Étape 1 : données principales sans images
-    const main = {
-      influenceuse: {
-        posts: JSON.parse(localStorage.getItem('cp_posts_inf') || '{}'),
-        ideas: JSON.parse(localStorage.getItem('cp_ideas_influenceuse') || '[]')
-      },
-      dovozo: {
-        posts: JSON.parse(localStorage.getItem('cp_posts_dov') || '{}'),
-        ideas: JSON.parse(localStorage.getItem('cp_ideas_dovozo') || '[]')
-      },
-      theme: JSON.parse(localStorage.getItem('cp_theme') || '{}'),
-      dayColors: JSON.parse(localStorage.getItem('cp_day_colors') || '{}')
-    };
-    await fbSet('main', main);
-    showSyncStatus('⟳ Envoi des images...', false);
-
-    // Étape 2 : images — on compresse les existantes avant envoi
-    const rawImgs = {
-      inf: JSON.parse(localStorage.getItem('cp_images_inf') || '{}'),
-      dov: JSON.parse(localStorage.getItem('cp_images_dov') || '{}')
-    };
-    // Compresser toutes les images existantes
     const compressAll = async (imgObj) => {
       const result = {};
       for (const key of Object.keys(imgObj)) {
@@ -1988,21 +1966,31 @@ async function forceSyncNow() {
       }
       return result;
     };
-    const imgs = {
-      inf: await compressAll(rawImgs.inf),
-      dov: await compressAll(rawImgs.dov)
+    const infImgs = await compressAll(JSON.parse(localStorage.getItem('cp_images_inf') || '{}'));
+    const dovImgs = await compressAll(JSON.parse(localStorage.getItem('cp_images_dov') || '{}'));
+    localStorage.setItem('cp_images_inf', JSON.stringify(infImgs));
+    localStorage.setItem('cp_images_dov', JSON.stringify(dovImgs));
+    const data = {
+      influenceuse: {
+        posts: JSON.parse(localStorage.getItem('cp_posts_inf') || '{}'),
+        ideas: JSON.parse(localStorage.getItem('cp_ideas_influenceuse') || '[]'),
+        images: infImgs
+      },
+      dovozo: {
+        posts: JSON.parse(localStorage.getItem('cp_posts_dov') || '{}'),
+        ideas: JSON.parse(localStorage.getItem('cp_ideas_dovozo') || '[]'),
+        images: dovImgs
+      },
+      theme: JSON.parse(localStorage.getItem('cp_theme') || '{}'),
+      dayColors: JSON.parse(localStorage.getItem('cp_day_colors') || '{}')
     };
-    // Sauvegarder les images compressées en local aussi
-    localStorage.setItem('cp_images_inf', JSON.stringify(imgs.inf));
-    localStorage.setItem('cp_images_dov', JSON.stringify(imgs.dov));
-
-    try {
-      await fbSet('images', imgs);
-      showSyncStatus('✅ Sync complète ! Ouvrez sur votre téléphone.', false);
-    } catch(imgErr) {
-      showSyncStatus('✅ Posts sync OK — images trop lourdes (supprimez les anciennes)', true);
-      console.warn('Images trop lourdes:', imgErr);
-    }
+    const resp = await fetch(JB_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-Master-Key': JB_KEY },
+      body: JSON.stringify(data)
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    showSyncStatus('✅ Sync complète ! Ouvrez sur votre téléphone.', false);
   } catch(e) {
     showSyncStatus('❌ Erreur : ' + e.message, true);
     console.error('Sync error:', e);
