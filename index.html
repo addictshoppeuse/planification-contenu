@@ -491,6 +491,30 @@ html,body{height:100%;font-family:var(--day-font);background:var(--bg);color:var
   </div>
 </div>
 
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDglKKnNqGqDg-SdriLJ5dld5xdywlqkEw",
+  authDomain: "planification-contenu.firebaseapp.com",
+  projectId: "planification-contenu",
+  storageBucket: "planification-contenu.firebasestorage.app",
+  messagingSenderId: "192413369042",
+  appId: "1:192413369042:web:777687bcbde8fd0f2ba30b"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+window._db = db;
+window._fsDoc = doc;
+window._fsGetDoc = getDoc;
+window._fsSetDoc = setDoc;
+window._firebaseReady = true;
+window.dispatchEvent(new Event('firebaseReady'));
+</script>
+
 <script>
 const MONTHS=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 const DAYS_FULL=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
@@ -1424,6 +1448,7 @@ function loadIdeas(profileKey) {
 function saveIdeas(profileKey, ideas) {
   localStorage.setItem('cp_ideas_' + profileKey, JSON.stringify(ideas));
   scheduleSave();
+  saveToFirestore();
 }
 
 function setView_ideas() {
@@ -1684,18 +1709,96 @@ async function toggleAutoSave() {
 
 // Patch savePosts et saveTheme pour déclencher l'autosave
 const _origSavePosts = savePosts;
-savePosts = function() { _origSavePosts(); scheduleSave(); };
+savePosts = function() { _origSavePosts(); scheduleSave(); saveToFirestore(); };
 const _origSaveTheme = saveTheme;
-saveTheme = function(k,v) { _origSaveTheme(k,v); scheduleSave(); };
+saveTheme = function(k,v) { _origSaveTheme(k,v); scheduleSave(); saveToFirestore(); };
 const _origSaveDayColors = saveDayColors;
-saveDayColors = function() { _origSaveDayColors(); scheduleSave(); };
+saveDayColors = function() { _origSaveDayColors(); scheduleSave(); saveToFirestore(); };
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── FIREBASE SYNC ─────────────────────────────────────────────────────────────
+let _firestoreSaveTimer = null;
+
+function saveToFirestore() {
+  if (!window._firebaseReady) return;
+  clearTimeout(_firestoreSaveTimer);
+  _firestoreSaveTimer = setTimeout(async () => {
+    try {
+      const data = getAllDataForSave();
+      await window._fsSetDoc(window._fsDoc(window._db, 'data', 'main'), data);
+      showSyncStatus('✓ Synchronisé');
+    } catch(e) {
+      console.warn('Erreur sync Firebase:', e);
+      showSyncStatus('⚠ Erreur sync', true);
+    }
+  }, 1000);
+}
+
+function showSyncStatus(msg, isError) {
+  let el = document.getElementById('syncStatus');
+  if (!el) {
+    el = document.createElement('span');
+    el.id = 'syncStatus';
+    el.style.cssText = 'font-size:11px;margin-left:8px;transition:opacity .5s';
+    document.getElementById('autoSaveStatus').parentNode.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.color = isError ? '#c0392b' : '#3b6d11';
+  el.style.opacity = '1';
+  if (!isError) setTimeout(() => { el.style.opacity = '0'; }, 3000);
+}
+
+async function loadFromFirestore() {
+  if (!window._firebaseReady) return;
+  try {
+    showSyncStatus('⟳ Chargement...');
+    const snap = await window._fsGetDoc(window._fsDoc(window._db, 'data', 'main'));
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data.influenceuse) {
+        if (data.influenceuse.posts) localStorage.setItem('cp_posts_inf', JSON.stringify(data.influenceuse.posts));
+        if (data.influenceuse.images) localStorage.setItem('cp_images_inf', JSON.stringify(data.influenceuse.images));
+        if (data.influenceuse.ideas) localStorage.setItem('cp_ideas_influenceuse', JSON.stringify(data.influenceuse.ideas));
+      }
+      if (data.dovozo) {
+        if (data.dovozo.posts) localStorage.setItem('cp_posts_dov', JSON.stringify(data.dovozo.posts));
+        if (data.dovozo.images) localStorage.setItem('cp_images_dov', JSON.stringify(data.dovozo.images));
+        if (data.dovozo.ideas) localStorage.setItem('cp_ideas_dovozo', JSON.stringify(data.dovozo.ideas));
+      }
+      if (data.theme) localStorage.setItem('cp_theme', JSON.stringify(data.theme));
+      if (data.dayColors) localStorage.setItem('cp_day_colors', JSON.stringify(data.dayColors));
+      showSyncStatus('✓ Données chargées');
+    } else {
+      showSyncStatus('✓ Nouveau fichier');
+    }
+    // Recharger l'app avec les données Firestore
+    posts = loadPosts();
+    theme = loadTheme();
+    dayColors = loadDayColors();
+    applyTheme();
+    applyDayColors();
+    renderSidebar();
+    renderMain();
+    updateTodayBadge();
+  } catch(e) {
+    console.warn('Erreur chargement Firebase:', e);
+    showSyncStatus('⚠ Hors ligne - données locales', true);
+  }
+}
+
+// Démarrer l'app puis charger depuis Firestore
 applyTheme();
 updateNetworkOptions();
 updateFilterNetOptions();
 switchProfile('influenceuse');
 updateTodayBadge();
+
+if (window._firebaseReady) {
+  loadFromFirestore();
+} else {
+  window.addEventListener('firebaseReady', loadFromFirestore, { once: true });
+}
+// ─────────────────────────────────────────────────────────────────────────────
 </script>
 </body>
 </html>
