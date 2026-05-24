@@ -480,6 +480,7 @@ html,body{height:100%;font-family:var(--day-font);background:var(--bg);color:var
           </select>
         </div>
         <button class="settings-btn" onclick="openSettings()">⚙ Personnaliser</button>
+        <button class="settings-btn" onclick="forceSyncNow()" title="Envoyer toutes les données vers Firebase maintenant">☁ Sync</button>
         <button class="settings-btn" id="autoSaveBtn" onclick="toggleAutoSave()" title="Activer la sauvegarde automatique sur disque">💾 Sauvegarde auto : OFF</button>
         <div style="display:flex;gap:4px">
           <button class="settings-btn" onclick="exportData()" title="Sauvegarder mes posts dans un fichier">⬇ Export</button>
@@ -1962,6 +1963,35 @@ async function loadFromFirestore() {
   } catch(e) {
     console.warn('Erreur chargement:', e);
     showSyncStatus('⚠ Hors ligne — données locales', true);
+  }
+}
+
+async function forceSyncNow() {
+  showSyncStatus('⟳ Envoi en cours...', false);
+  try {
+    const main = {
+      influenceuse: {
+        posts: JSON.parse(localStorage.getItem('cp_posts_inf') || '{}'),
+        ideas: JSON.parse(localStorage.getItem('cp_ideas_influenceuse') || '[]')
+      },
+      dovozo: {
+        posts: JSON.parse(localStorage.getItem('cp_posts_dov') || '{}'),
+        ideas: JSON.parse(localStorage.getItem('cp_ideas_dovozo') || '[]')
+      },
+      theme: JSON.parse(localStorage.getItem('cp_theme') || '{}'),
+      dayColors: JSON.parse(localStorage.getItem('cp_day_colors') || '{}')
+    };
+    await fbSet('main', main);
+    const imgs = {
+      inf: JSON.parse(localStorage.getItem('cp_images_inf') || '{}'),
+      dov: JSON.parse(localStorage.getItem('cp_images_dov') || '{}')
+    };
+    await fbSet('images', imgs);
+    showSyncStatus('✅ Sync réussie ! Ouvrez maintenant sur votre téléphone.', false);
+    setTimeout(() => showSyncStatus('', false), 6000);
+  } catch(e) {
+    showSyncStatus('❌ Erreur : ' + e.message, true);
+    console.error('Sync error:', e);
   }
 }
 
