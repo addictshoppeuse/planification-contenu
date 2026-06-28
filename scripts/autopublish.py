@@ -48,7 +48,6 @@ def get_channels(token):
             id
             name
             service
-            serviceType
           }
         }
       }
@@ -62,17 +61,9 @@ def get_channels(token):
         channels.extend(org.get("channels", []))
     return channels
 
-def find_channel_id(channels, service, is_company=False):
+def find_channel_id(channels, name_keyword):
     for ch in channels:
-        svc = ch.get("service", "").lower()
-        if service == "linkedin":
-            if svc == "linkedin":
-                stype = ch.get("serviceType", "").lower()
-                if is_company and stype in ("page", "company"):
-                    return ch["id"]
-                if not is_company and stype not in ("page", "company"):
-                    return ch["id"]
-        elif service == "tiktok" and svc == "tiktok":
+        if name_keyword.lower() in ch.get("name", "").lower():
             return ch["id"]
     return None
 
@@ -122,12 +113,12 @@ def main():
 
     print(f"✅ {len(channels)} canal/canaux Buffer trouvé(s):")
     for ch in channels:
-        print(f"   - {ch.get('service')} / {ch.get('serviceType','?')} : {ch.get('name','?')} (id: {ch.get('id')})")
+        print(f"   - {ch.get('service')} : {ch.get('name','?')} (id: {ch.get('id')})")
 
     channel_map = {
-        "li":     find_channel_id(channels, "linkedin", is_company=False),
-        "li_dov": find_channel_id(channels, "linkedin", is_company=True),
-        "tt":     find_channel_id(channels, "tiktok"),
+        "li":     find_channel_id(channels, "sulabooks"),
+        "li_dov": find_channel_id(channels, "dovozo"),
+        "tt":     find_channel_id(channels, "sulabooks"),
     }
     print("Mapping réseaux :", channel_map)
 
