@@ -5,6 +5,12 @@ from datetime import datetime
 
 BUFFER_GRAPHQL = "https://api.buffer.com/graphql"
 
+CHANNEL_IDS = {
+    "li":     "6a3690b538b5579345b77faf",
+    "li_dov": "6a3690b538b5579345b77fae",
+    "tt":     "6a36908738b5579345b77e8c",
+}
+
 def read_data():
     with open("data.json", "r", encoding="utf-8") as f:
         return json.load(f)
@@ -38,27 +44,6 @@ def graphql(token, query, variables=None):
         print(f"  ❌ GraphQL errors: {resp['errors']}")
         return None
     return resp.get("data")
-
-def get_channels(token):
-    query = """
-    query {
-      channels(input: {}) {
-        id
-        name
-        service
-      }
-    }
-    """
-    data = graphql(token, query)
-    if not data:
-        return []
-    return data.get("channels", [])
-
-def find_channel_id(channels, name_keyword):
-    for ch in channels:
-        if name_keyword.lower() in ch.get("name", "").lower():
-            return ch["id"]
-    return None
 
 def create_post(token, channel_id, text):
     mutation = """
@@ -99,21 +84,7 @@ def main():
         print("❌ BUFFER_API_KEY non configuré")
         return
 
-    channels = get_channels(buffer_token)
-    if not channels:
-        print("❌ Impossible de récupérer les canaux Buffer")
-        return
-
-    print(f"✅ {len(channels)} canal/canaux Buffer trouvé(s):")
-    for ch in channels:
-        print(f"   - {ch.get('service')} : {ch.get('name','?')} (id: {ch.get('id')})")
-
-    channel_map = {
-        "li":     find_channel_id(channels, "sulabooks"),
-        "li_dov": find_channel_id(channels, "dovozo"),
-        "tt":     find_channel_id(channels, "sulabooks"),
-    }
-    print("Mapping réseaux :", channel_map)
+    print("✅ Canaux configurés :", CHANNEL_IDS)
 
     data = read_data()
     changed = False
@@ -128,10 +99,10 @@ def main():
                 if not is_due(date_str, post.get("time", "")):
                     continue
                 network = post.get("network", "")
-                channel_id = channel_map.get(network)
+                channel_id = CHANNEL_IDS.get(network)
                 print(f"\n📤 [{profile}] {date_str} — {post.get('title','?')} ({network})")
                 if not channel_id:
-                    print(f"  ⚠️  Réseau '{network}' non trouvé dans Buffer — ignoré")
+                    print(f"  ⚠️  Réseau '{network}' non configuré — ignoré")
                     continue
                 parts = [p for p in [post.get("title"), post.get("desc"), post.get("tags")] if p]
                 text = "\n\n".join(parts)[:3000]
