@@ -42,19 +42,17 @@ def graphql(token, query, variables=None):
 def get_channels(token):
     query = """
     query {
-      account {
-        channels {
-          id
-          name
-          service
-        }
+      channels {
+        id
+        name
+        service
       }
     }
     """
     data = graphql(token, query)
     if not data:
         return []
-    return data.get("account", {}).get("channels", [])
+    return data.get("channels", [])
 
 def find_channel_id(channels, name_keyword):
     for ch in channels:
