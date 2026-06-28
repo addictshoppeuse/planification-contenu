@@ -29,6 +29,7 @@ jobs:
       - name: Lancer la publication automatique
         env:
           BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+          TZ: Europe/Paris
         run: python scripts/autopublish.py
 
       - name: Sauvegarder les statuts mis à jour
