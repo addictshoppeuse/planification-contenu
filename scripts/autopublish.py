@@ -42,7 +42,7 @@ def graphql(token, query, variables=None):
 def get_channels(token):
     query = """
     query {
-      channels {
+      channels(input: {}) {
         id
         name
         service
