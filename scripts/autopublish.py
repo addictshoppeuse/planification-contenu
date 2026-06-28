@@ -62,8 +62,7 @@ def create_post(token, channel_id, text):
         "input": {
             "text": text,
             "channelId": channel_id,
-            "schedulingType": "automatic",
-            "mode": "addToQueue"
+            "schedulingType": "direct",
         }
     }
     data = graphql(token, mutation, variables)
