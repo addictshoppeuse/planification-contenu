@@ -1,7 +1,7 @@
 import json
 import os
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 
 BUFFER_GRAPHQL = "https://api.buffer.com/graphql"
 
@@ -58,11 +58,13 @@ def create_post(token, channel_id, text):
       }
     }
     """
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
     variables = {
         "input": {
             "text": text,
             "channelId": channel_id,
-            "schedulingType": "direct",
+            "schedulingType": "custom",
+            "dueAt": now_iso
         }
     }
     data = graphql(token, mutation, variables)
