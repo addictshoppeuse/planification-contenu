@@ -5482,7 +5482,10 @@ function postToCalendarEvent(post, dayKey) {
     ev.end = { dateTime: endT, timeZone: 'Europe/Paris' };
   } else {
     ev.start = { date: dayKey };
-    ev.end = { date: dayKey };
+    var parts = dayKey.split('-');
+    var nextDay = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]) + 1);
+    var nd = nextDay.getFullYear() + '-' + String(nextDay.getMonth()+1).padStart(2,'0') + '-' + String(nextDay.getDate()).padStart(2,'0');
+    ev.end = { date: nd };
   }
 
   const colors = { instagram:'6', tiktok:'3', youtube:'11', facebook:'9', pinterest:'2', x:'8', linkedin:'7', threads:'1' };
@@ -5506,8 +5509,9 @@ async function syncPostToCalendar(post, dayKey) {
       const r = await gcalFetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
         method: 'POST', body: JSON.stringify(ev)
       });
-      if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || r.status); }
+      if (!r.ok) { const e = await r.json(); console.error('gcal create fail', e); throw new Error(e.error?.message || r.status); }
       const data = await r.json();
+      console.log('gcal event created', data.id, data.htmlLink);
       post.gcalEventId = data.id;
     }
   } catch(e) {
