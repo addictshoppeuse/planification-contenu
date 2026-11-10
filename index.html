@@ -2092,7 +2092,7 @@ function openPostModal(day){
   document.getElementById('f_url').value='';
   document.getElementById('f_video').value='';
   document.getElementById('f_ctype').value='';
-  var vp=document.getElementById('videoUploadProgress'); vp.style.display='none'; vp.textContent=''; vp.style.background='#f5f5f5';
+  cancelVideoUpload();
   ['views','likes','comments','shares','saves'].forEach(k=>document.getElementById('f_r_'+k).value='');
   document.getElementById('f_recurring').checked=false;
   document.getElementById('imgPreviews').innerHTML='';
@@ -2130,7 +2130,7 @@ function openEditModal(key,pi,e){
   document.getElementById('postOverlay').classList.add('open');
 }
 
-function closePostModal(){document.getElementById('postOverlay').classList.remove('open'); planningFromIdea = false; var vp=document.getElementById('videoUploadProgress'); vp.style.display='none'; vp.textContent=''; vp.style.background='#f5f5f5';}
+function closePostModal(){document.getElementById('postOverlay').classList.remove('open'); planningFromIdea = false; cancelVideoUpload();}
 
 
 function overlayClick(e,id){if(e.target.id===id)document.getElementById(id).classList.remove('open');}
@@ -4458,6 +4458,13 @@ async function uploadPDFToCloudinary(pdfBlob) {
 // ── CLOUDINARY VIDEO UPLOAD ───────────────────────────────────────────────────
 const CLOUDINARY_CLOUD = 'dc2n3evlj';
 const CLOUDINARY_PRESET = 'tiktok_videos';
+let _videoUploadXhr = null;
+
+function cancelVideoUpload() {
+  if (_videoUploadXhr) { try { _videoUploadXhr.abort(); } catch(e) {} _videoUploadXhr = null; }
+  var vp = document.getElementById('videoUploadProgress');
+  vp.style.display = 'none'; vp.textContent = ''; vp.innerHTML = ''; vp.style.background = '#f5f5f5';
+}
 
 function uploadToCloudinaryDirect(file, prog) {
   return new Promise((resolve, reject) => {
@@ -4466,6 +4473,7 @@ function uploadToCloudinaryDirect(file, prog) {
     fd.append('file', file);
     fd.append('upload_preset', CLOUDINARY_PRESET);
     const xhr = new XMLHttpRequest();
+    _videoUploadXhr = xhr;
     xhr.open('POST', 'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD + '/video/upload');
     xhr.upload.onprogress = ev => {
       if (ev.lengthComputable) {
@@ -4473,6 +4481,7 @@ function uploadToCloudinaryDirect(file, prog) {
       }
     };
     xhr.onload = () => {
+      _videoUploadXhr = null;
       if (xhr.status === 200) {
         try { resolve(JSON.parse(xhr.responseText).secure_url); }
         catch(e) { reject(new Error('Réponse Cloudinary invalide')); }
@@ -4482,8 +4491,8 @@ function uploadToCloudinaryDirect(file, prog) {
         reject(new Error('Cloudinary ' + xhr.status + (detail ? ' : ' + detail : '')));
       }
     };
-    xhr.onerror = () => reject(new Error('connexion'));
-    xhr.ontimeout = () => reject(new Error('timeout'));
+    xhr.onerror = () => { _videoUploadXhr = null; reject(new Error('connexion')); };
+    xhr.ontimeout = () => { _videoUploadXhr = null; reject(new Error('timeout')); };
     xhr.timeout = 300000;
     xhr.send(fd);
   });
@@ -4519,11 +4528,13 @@ async function handleVideoUpload(e) {
 
   try {
     const url = await uploadToCloudinaryDirect(file, prog);
+    if (!document.getElementById('postOverlay').classList.contains('open')) return;
     document.getElementById('f_video').value = url;
     prog.style.background = '#eafad4';
     prog.textContent = '✅ Vidéo uploadée ! (' + sizeMB + ' Mo)';
     setTimeout(() => { prog.style.display = 'none'; }, 4000);
   } catch(err) {
+    if (!document.getElementById('postOverlay').classList.contains('open')) return;
     prog.style.background = '#ffeaea';
     if (err.message === 'connexion') {
       prog.innerHTML = '❌ Connexion perdue.<br><span style="font-size:11px">Vérifie ton WiFi/4G et réessaie.</span>';
