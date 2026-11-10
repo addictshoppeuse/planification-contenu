@@ -5364,7 +5364,7 @@ let _gcalToken = localStorage.getItem('gcal_token') || null;
 let _gcalTokenExp = parseInt(localStorage.getItem('gcal_token_exp') || '0');
 let _gcalTokenClient = null;
 
-function gcalClientId() { return (localStorage.getItem('gcal_client_id') || '').trim(); }
+function gcalClientId() { return (localStorage.getItem('gcal_client_id') || '96923712802-gc4547afen8tavirludaoedomdkako8g.apps.googleusercontent.com').trim(); }
 
 function isGcalConnected() { return !!_gcalToken && Date.now() < _gcalTokenExp; }
 
