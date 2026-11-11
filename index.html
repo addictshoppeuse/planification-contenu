@@ -72,7 +72,7 @@ svg.icon{display:block}
 *:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 22%,transparent);outline-offset:2px}
 
 /* ── BARRE SUPÉRIEURE (identique au CRM) ─────────────────────────────────── */
-.page-title-bar{min-height:76px;background:color-mix(in srgb,var(--title-bg) 8%,#ffffff 92%);color:var(--day-color);display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:22px;padding:12px 20px;flex-shrink:0;position:sticky;top:0;z-index:30;border-bottom:1px solid color-mix(in srgb,var(--border) 78%,#ffffff 22%);box-shadow:0 8px 28px rgba(38,28,74,.07)}
+.page-title-bar{min-height:76px;background:color-mix(in srgb,var(--title-bg) 8%,#ffffff 92%);color:var(--day-color);display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:22px;padding:12px 20px;padding-top:calc(env(safe-area-inset-top) + 12px);flex-shrink:0;position:sticky;top:0;z-index:30;border-bottom:1px solid color-mix(in srgb,var(--border) 78%,#ffffff 22%);box-shadow:0 8px 28px rgba(38,28,74,.07)}
 .top-brand{display:flex;align-items:center;gap:11px;min-width:max-content;white-space:nowrap;padding-right:4px}
 .brand-logo{position:relative;width:42px;height:42px;border-radius:10px;background:var(--accent);color:var(--accent-text,#fff);display:grid;place-items:center;box-shadow:0 6px 16px rgba(67,44,126,.18);flex:0 0 auto;overflow:hidden}
 .brand-logo svg{width:22px;height:22px}
@@ -5495,7 +5495,7 @@ function postToCalendarEvent(post, dayKey) {
 }
 
 async function syncPostToCalendar(post, dayKey) {
-  if (!gcalClientId() || !isGcalConnected()) return;
+  if (!gcalClientId() || !_gcalTokenClient) return;
   const ev = postToCalendarEvent(post, dayKey);
   const ss = document.getElementById('gcalSyncStatus');
   try {
@@ -5521,7 +5521,7 @@ async function syncPostToCalendar(post, dayKey) {
 }
 
 async function deleteCalendarEvent(post) {
-  if (!post.gcalEventId || !gcalClientId() || !isGcalConnected()) return;
+  if (!post.gcalEventId || !gcalClientId() || !_gcalTokenClient) return;
   try {
     await gcalFetch('https://www.googleapis.com/calendar/v3/calendars/primary/events/' + post.gcalEventId, { method: 'DELETE' });
   } catch(e) { console.error('gcal delete error', e); }
