@@ -3019,6 +3019,7 @@ function renderMain(){
       if(!posts[key])posts[key]=[];
       posts[key].push(moved);
       savePosts();
+      syncPostToCalendar(moved, key).then(function(){ savePosts(); });
       renderDayPosts(fromDay);
       renderDayPosts(key);
       renderCal();
